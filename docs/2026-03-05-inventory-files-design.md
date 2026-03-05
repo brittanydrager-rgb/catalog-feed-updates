@@ -152,7 +152,7 @@ Swap mock imports for GraphQL queries via Mesh gateway. Backend pipeline:
 4. Diff Computation (against previous `feed_snapshot`)
 5. Quality Score & Anomaly Detection
 
-See [backend-design.md](../../home/bento/work/hackerthon/inventory_files/inventory_files/catalog-feed-updates/docs/backend-design.md) for full data model and API surface.
+See [backend-design.md](./backend-design.md) for full data model and API surface.
 
 ---
 
@@ -196,4 +196,3 @@ Port prototype's plain CSS (BEM naming) directly. Use existing TDS components (`
 | CSS conflicts with IPP global styles | BEM naming with unique prefixes (`inv-`, `ddp-`, `feed-upload__`, etc.) |
 | TDS component gaps | Custom CSS for diff-specific UI; only use TDS for standard elements |
 | Access control may not match demo needs | Existing `PackagesDashboardReports` permission should work for demo |
-

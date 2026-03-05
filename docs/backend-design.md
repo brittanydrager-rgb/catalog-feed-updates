@@ -196,6 +196,7 @@ This document covers the data model, API surface, processing pipeline, and integ
 │     description    TEXT  │
 │     is_dismissible BOOL  │
 │     dismissed_at   TSTZ  │   ← null if not dismissed
+│     dismissed_by   TEXT  │   ← who dismissed (for traceability)
 │     created_at     TSTZ  │
 └──────────────────────────┘
 
@@ -215,9 +216,46 @@ This document covers the data model, API surface, processing pipeline, and integ
 └──────────────────────────────┘
 ```
 
+### Required Indexes
+
+| Table | Column(s) | Why |
+|---|---|---|
+| `feed_snapshot_items` | `(snapshot_id, scan_code)` | **Diff join hot path — most critical** |
+| `feed_items` | `(upload_id, scan_code)` | Dedup check + diff join |
+| `pls_match_results` | `(upload_id, item_id)` | Diff join |
+| `feed_diff_items` | `(diff_id, change_type, severity)` | API filtering |
+| `feed_diffs` | `(retailer_id, created_at DESC)` | History queries |
+| `feed_quality_score_history` | `(retailer_id, computed_at DESC)` | Trend sparkline |
+| `feed_anomaly_alerts` | `(upload_id, alert_type)` | Alert lookups |
+| `feed_uploads` | `(retailer_id, uploaded_at DESC)` | Status polling |
+
+### Data Model Notes
+
+- **Denormalized `upload_id` on `feed_item_validations` and `pls_match_results`**: Intentional denormalization for query performance — avoids joining through `feed_items` for upload-scoped queries.
+- **`feed_diff_items.item_id` FK lifecycle**: `feed_items` has a 30-day retention but diffs may outlive them. Use `ON DELETE SET NULL` or cascade-delete diffs alongside items.
+- **`quality_score` source of truth**: `feed_quality_score_history` is the canonical source. `feed_diffs.quality_score` is a denormalized copy for convenience.
+- **`feed_column_mappings` versioning**: Snapshot the mapping config used per upload (store in `feed_uploads.column_mapping_snapshot JSONB`) so old uploads can be re-processed with their original mapping.
+
 ---
 
 ## Processing Pipeline
+
+### Hackathon: Synchronous
+
+For the hackathon, the validation pipeline is a **synchronous API call**. The client uploads a file, the server runs all 5 phases inline, and returns the result in the response. With mock data and small feeds this is fast enough, and avoids the complexity of async job infrastructure, status polling, and worker orchestration for a demo.
+
+### Production: Temporal Workflows
+
+For production rollout, switch to **Temporal workflows**. The pipeline has 5 sequential phases, and at real scale (100k+ SKUs, ~34s processing), we need:
+- **Phase-level checkpointing** — if the worker crashes after PLS matching (the most expensive step), resume from Phase 4 instead of re-running everything
+- **Built-in retry with backoff** per activity
+- **Durable state and workflow-level dedup** — avoids double-insert if a job gets retried (e.g., `feed_items` and `pls_match_results` would get duplicate rows without idempotency guards)
+
+The sync-to-async migration path is clean: extract each phase into a Temporal activity, wrap them in a workflow, and swap the API from sync response to "return upload_id + poll status." The phase logic itself doesn't change.
+
+### Concurrent Upload Guard
+
+If a retailer uploads two files before the first finishes processing, both workers will try to save a new snapshot (last write wins, loser's diff baseline is gone). Use a **per-retailer mutex** — Temporal's single-execution-per-workflow-ID for production, or a DB advisory lock for the hackathon — to serialize uploads per retailer.
 
 ```
                     ┌─────────────┐
@@ -238,7 +276,8 @@ This document covers the data model, API surface, processing pipeline, and integ
               │  4. Return upload_id +     │
               │     status: pending        │
               └────────────┬───────────────┘
-                           │ async job
+                           │ async job (production)
+                           │ sync inline (hackathon)
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   Feed Processing Worker                     │
@@ -341,8 +380,8 @@ This document covers the data model, API surface, processing pipeline, and integ
 │  │  3. Insert into pls_match_results                      │  │
 │  │                                                        │  │
 │  │  4. Mismatch detection:                                │  │
-│  │     For each matched product_id, fetch the canonical   │  │
-│  │     catalog record and compare:                        │  │
+│  │     PLS returns canonical data alongside the match —   │  │
+│  │     no separate catalog lookups needed. Compare:       │  │
 │  │     - item_name vs catalog name for that product_id    │  │
 │  │     - brand_name vs catalog brand                      │  │
 │  │     - size format vs catalog standard                  │  │
@@ -416,9 +455,11 @@ This document covers the data model, API surface, processing pipeline, and integ
 │  │    └────────────────────┴───────────┴──────────────┘   │  │
 │  │    → Insert feed_anomaly_alerts                        │  │
 │  │                                                        │  │
-│  │  AI Summary:                                           │  │
-│  │    Pass diff summary + top changes to LLM              │  │
-│  │    → Update feed_diffs.ai_summary                      │  │
+│  │  AI Summary (async — non-blocking):                     │  │
+│  │    Finish job with ai_summary = null.                  │  │
+│  │    Fire a separate async task to generate summary.     │  │
+│  │    Update feed_diffs.ai_summary when ready.            │  │
+│  │    UI shows "Generating summary..." placeholder.       │  │
 │  │                                                        │  │
 │  │  Final status:                                         │  │
 │  │    IF any warnings → 'completed_with_warnings'         │  │
@@ -431,84 +472,204 @@ This document covers the data model, API surface, processing pipeline, and integ
 
 ## API Surface
 
+The IPP frontend (`retailer-platform-web-workspace`) uses **GraphQL via Apollo** for everything. The `data-ingestion` domain uses Protobuf-backed GraphQL mesh endpoints. Adding REST would mean bolting on a second HTTP client alongside Apollo or wrapping REST in GraphQL at the BFF layer. All endpoints are GraphQL-native.
+
 ### Upload & Status
 
-```
-POST   /v1/retailers/:retailer_id/feed-uploads
-       Content-Type: multipart/form-data
-       Body: file (binary)
-       Response: { upload_id, status: "pending" }
+```graphql
+# File upload — use multipart request via Apollo Upload
+mutation uploadFeed($retailerId: ID!, $file: Upload!) {
+  uploadFeed(retailerId: $retailerId, file: $file) {
+    uploadId
+    status
+  }
+}
 
-GET    /v1/retailers/:retailer_id/feed-uploads/:upload_id/status
-       Response: {
-         upload_id, status, total_rows, valid_rows, invalid_rows,
-         rejection_reason, processed_at
-       }
-       Poll this until status is terminal.
+# Status polling (recommended interval: every 2s)
+query feedUploadStatus($retailerId: ID!, $uploadId: ID!) {
+  feedUploadStatus(retailerId: $retailerId, uploadId: $uploadId) {
+    uploadId
+    status
+    totalRows
+    validRows
+    invalidRows
+    rejectionReason
+    processedAt
+  }
+}
 ```
 
 ### Results (once processing complete)
 
+```graphql
+query feedValidation($retailerId: ID!, $uploadId: ID!) {
+  feedValidation(retailerId: $retailerId, uploadId: $uploadId) {
+    status
+    summary {
+      totalItems
+      valid
+      invalid
+      blockingErrors
+    }
+    violations {
+      itemId
+      rowNumber
+      field
+      rule
+      message
+      severity
+    }
+  }
+}
+
+query feedMatches($retailerId: ID!, $uploadId: ID!) {
+  feedMatches(retailerId: $retailerId, uploadId: $uploadId) {
+    matchedCount
+    unmatchedCount
+    items {
+      scanCode
+      codeType
+      productId
+      matchMethod
+      confidence
+      alternatives { productId, score }
+      isDuplicate
+    }
+  }
+}
+
+query feedDiff($retailerId: ID!, $diffId: ID!) {
+  feedDiff(retailerId: $retailerId, diffId: $diffId) {
+    diffId
+    uploadId
+    previousUploadId
+    addedCount
+    removedCount
+    changedCount
+    qualityScore
+    aiSummary
+    categories { id, label, severity, count }
+  }
+}
+
+query feedDiffItems(
+  $retailerId: ID!
+  $diffId: ID!
+  $changeType: ChangeType
+  $severity: Severity
+  $category: String
+  $page: Int
+  $perPage: Int
+) {
+  feedDiffItems(
+    retailerId: $retailerId
+    diffId: $diffId
+    changeType: $changeType
+    severity: $severity
+    category: $category
+    page: $page
+    perPage: $perPage
+  ) {
+    items {
+      scanCode
+      productId
+      productName
+      changeType
+      severity
+      fieldChanges { field, previous, current, isHighSeverity }
+      isCatalogReady
+      notReadyReasons
+    }
+    pagination { page, perPage, total }
+  }
+}
+
+query feedQuality($retailerId: ID!) {
+  feedQuality(retailerId: $retailerId) {
+    current {
+      score
+      catalogReadyCount
+      totalCount
+      notReadyCount
+      breakdown { field, count }
+    }
+    trend { uploadId, score, computedAt }
+  }
+}
+
+query feedAnomalyAlerts($retailerId: ID!, $uploadId: ID!) {
+  feedAnomalyAlerts(retailerId: $retailerId, uploadId: $uploadId) {
+    alerts {
+      alertId
+      type
+      category
+      affectedCount
+      affectedPct
+      description
+      isDismissible
+    }
+  }
+}
+
+mutation dismissAnomalyAlert($retailerId: ID!, $alertId: ID!) {
+  dismissAnomalyAlert(retailerId: $retailerId, alertId: $alertId) {
+    dismissedAt
+  }
+}
 ```
-GET    /v1/retailers/:retailer_id/feed-uploads/:upload_id/validation
-       Response: {
-         status,
-         summary: { total_items, valid, invalid, blocking_errors },
-         violations: [{ item_id, row_number, field, rule, message, severity }]
-       }
 
-GET    /v1/retailers/:retailer_id/feed-uploads/:upload_id/matches
-       Response: {
-         matched_count, unmatched_count,
-         items: [{
-           scan_code, code_type, product_id, match_method,
-           confidence, alternatives, is_duplicate
-         }]
-       }
+### Upload Cancellation
 
-GET    /v1/retailers/:retailer_id/feed-diffs/:diff_id
-       Response: {
-         diff_id, upload_id, previous_upload_id,
-         added_count, removed_count, changed_count,
-         quality_score, ai_summary,
-         categories: [{ id, label, severity, count }]
-       }
-
-GET    /v1/retailers/:retailer_id/feed-diffs/:diff_id/items
-       Query: ?change_type=changed&severity=critical&category=uom&page=1&per_page=50
-       Response: {
-         items: [{
-           scan_code, product_id, product_name, change_type, severity,
-           field_changes: [{ field, previous, current, is_high_severity }],
-           is_catalog_ready, not_ready_reasons
-         }],
-         pagination: { page, per_page, total }
-       }
-
-GET    /v1/retailers/:retailer_id/feed-quality
-       Response: {
-         current: { score, catalog_ready_count, total_count, not_ready_count, breakdown },
-         trend: [{ upload_id, score, computed_at }]  // last 5
-       }
-
-GET    /v1/retailers/:retailer_id/feed-uploads/:upload_id/anomaly-alerts
-       Response: {
-         alerts: [{
-           alert_id, type, category, affected_count, affected_pct,
-           description, is_dismissible
-         }]
-       }
-
-PATCH  /v1/retailers/:retailer_id/anomaly-alerts/:alert_id/dismiss
-       Response: { dismissed_at }
+```graphql
+mutation cancelFeedUpload($retailerId: ID!, $uploadId: ID!) {
+  cancelFeedUpload(retailerId: $retailerId, uploadId: $uploadId) {
+    uploadId
+    status
+  }
+}
 ```
 
 ### Column Mapping (admin/onboarding)
 
+```graphql
+query feedColumnMappings($retailerId: ID!) {
+  feedColumnMappings(retailerId: $retailerId) {
+    mappingId
+    sourceColumn
+    canonicalField
+    transformRule
+  }
+}
+
+# Partial update — only send the mappings you want to change
+mutation updateFeedColumnMappings(
+  $retailerId: ID!
+  $mappings: [ColumnMappingInput!]!
+) {
+  updateFeedColumnMappings(retailerId: $retailerId, mappings: $mappings) {
+    mappingId
+    sourceColumn
+    canonicalField
+    transformRule
+  }
+}
 ```
-GET    /v1/retailers/:retailer_id/feed-column-mappings
-PUT    /v1/retailers/:retailer_id/feed-column-mappings
-       Body: { mappings: [{ source_column, canonical_field, transform_rule }] }
+
+### Error Responses
+
+All mutations return structured errors via GraphQL's standard `errors` array:
+
+```graphql
+{
+  "errors": [{
+    "message": "Upload exceeds maximum file size",
+    "extensions": {
+      "code": "VALIDATION_ERROR",
+      "field": "file",
+      "details": "Max file size is 100MB"
+    }
+  }]
+}
 ```
 
 ---
@@ -575,7 +736,7 @@ For a 100,000 SKU retailer:
 
 ## Mismatch Detection Logic
 
-After PLS returns a `product_id` for each scan code, fetch the canonical catalog record and compare:
+PLS returns canonical catalog data alongside the match result — no separate catalog lookups are needed. Compare the feed item fields against the PLS-returned canonical data:
 
 ```python
 def detect_mismatches(feed_item, catalog_record):
@@ -634,65 +795,75 @@ Upload day 1:  No previous snapshot exists
 Upload day 2:  Previous snapshot from day 1 exists
                → compute full diff
                → compute quality score (trend: 2 points)
-               → overwrite snapshot with day 2 state
+               → save new snapshot (keep day 1 snapshot as rollback)
 
 Upload day N:  Previous snapshot from day N-1
                → full diff + quality trend (last 5 from history table)
-
-Snapshot retention:
-  - Only keep the LATEST snapshot per retailer (overwrite each time)
-  - Quality score history: keep last 30 entries per retailer
-  - Feed uploads + items: keep last 90 days, then archive to cold storage
-  - Diffs: keep last 30 per retailer
+               → save new snapshot, prune oldest if > 3 retained
 ```
+
+### Snapshot Retention
+
+Keep the **last 3 snapshots** per retailer (instead of overwriting). If a corrupted or bad feed gets processed and overwrites the baseline, the next upload's diff would compare against bad data with no way back. Retaining 2-3 snapshots gives a rollback path with minimal storage overhead.
+
+Enforce with a `UNIQUE(retailer_id, snapshot_type)` constraint per slot, or a trigger that prunes the oldest snapshot when count exceeds 3.
+
+### Retention Windows
+
+| Data | Retention | Cleanup mechanism |
+|---|---|---|
+| `feed_uploads` + `feed_items` + `feed_item_validations` + `pls_match_results` | 30 days | Scheduled Temporal workflow / cron |
+| `feed_diffs` + `feed_diff_items` | Last 30 per retailer | Scheduled cleanup |
+| `feed_quality_score_history` | Last 30 entries per retailer | Scheduled cleanup |
+| `feed_snapshots` + `feed_snapshot_items` | Last 3 per retailer | Pruned on new snapshot creation |
+
+Auto-cleanup runs as a scheduled Temporal workflow (production) or cron job that sweeps stale data per the retention windows above.
 
 ---
 
 ## Sequence Diagram: Full Upload Flow
 
 ```
-IPP Client          IPP API          Worker          S3          PLS          Catalog DB
-    │                  │                │              │            │              │
-    │─POST /uploads───▶│                │              │            │              │
-    │                  │─store file────▶│              │            │              │
-    │                  │─insert row─────────────────────────────────────────────▶  │
-    │                  │─enqueue job───▶│              │            │              │
-    │◀─{upload_id}─────│                │              │            │              │
-    │                  │                │              │            │              │
-    │  (poll status)   │                │─fetch file──▶│            │              │
-    │─GET /status─────▶│                │◀─file bytes──│            │              │
-    │◀─"parsing"───────│                │              │            │              │
-    │                  │                │─parse + map columns       │              │
-    │                  │                │─insert feed_items─────────────────────▶  │
-    │─GET /status─────▶│                │              │            │              │
-    │◀─"validating"────│                │─validate each item       │              │
-    │                  │                │─insert validations────────────────────▶  │
-    │                  │                │              │            │              │
+IPP Client          IPP API          Worker          S3          PLS          DB
+    │                  │                │              │            │            │
+    │─POST /uploads───▶│                │              │            │            │
+    │                  │─store file────▶│              │            │            │
+    │                  │─insert row───────────────────────────────────────────▶ │
+    │                  │─enqueue job───▶│              │            │            │
+    │◀─{upload_id}─────│                │              │            │            │
+    │                  │                │              │            │            │
+    │  (poll status)   │                │─fetch file──▶│            │            │
+    │─GET /status─────▶│                │◀─file bytes──│            │            │
+    │◀─"parsing"───────│                │              │            │            │
+    │                  │                │─parse + map columns       │            │
+    │                  │                │─insert feed_items───────────────────▶ │
+    │─GET /status─────▶│                │              │            │            │
+    │◀─"validating"────│                │─validate each item       │            │
+    │                  │                │─insert validations──────────────────▶ │
+    │                  │                │              │            │            │
     │                  │                │ [if blocking errors: status=rejected, STOP]
-    │                  │                │              │            │              │
-    │─GET /status─────▶│                │              │            │              │
-    │◀─"matching"──────│                │─batch codes─────────────▶│              │
-    │                  │                │◀─match results────────────│              │
-    │                  │                │─insert pls_match_results─────────────▶  │
-    │                  │                │              │            │              │
-    │                  │                │─fetch catalog records─────────────────▶  │
-    │                  │                │◀─catalog data──────────────────────────  │
-    │                  │                │─detect mismatches         │              │
-    │                  │                │              │            │              │
+    │                  │                │              │            │            │
+    │─GET /status─────▶│                │              │            │            │
+    │◀─"matching"──────│                │─batch codes─────────────▶│            │
+    │                  │                │◀─match results + canonical data──────│
+    │                  │                │─insert pls_match_results─────────────▶ │
+    │                  │                │              │            │            │
+    │                  │                │─detect mismatches (using PLS canonical data)
+    │                  │                │              │            │            │
     │                  │                │ [if mismatches: status=rejected_mismatch, STOP]
-    │                  │                │              │            │              │
-    │─GET /status─────▶│                │              │            │              │
-    │◀─"computing_diff"│                │─fetch previous snapshot──────────────▶  │
-    │                  │                │◀─snapshot data─────────────────────────  │
-    │                  │                │─compute diff + quality + alerts          │
-    │                  │                │─insert results────────────────────────▶  │
-    │                  │                │─save new snapshot─────────────────────▶  │
-    │                  │                │              │            │              │
-    │─GET /status─────▶│                │              │            │              │
-    │◀─"completed"─────│                │              │            │              │
-    │                  │                │              │            │              │
-    │─GET /diff────────▶│               │              │            │              │
-    │◀─{diff + items}──│                │              │            │              │
+    │                  │                │              │            │            │
+    │─GET /status─────▶│                │              │            │            │
+    │◀─"computing_diff"│                │─fetch previous snapshot────────────▶ │
+    │                  │                │◀─snapshot data──────────────────────  │
+    │                  │                │─compute diff + quality + alerts       │
+    │                  │                │─insert results──────────────────────▶ │
+    │                  │                │─save new snapshot───────────────────▶ │
+    │                  │                │              │            │            │
+    │─GET /status─────▶│                │              │            │            │
+    │◀─"completed"─────│                │              │            │            │
+    │                  │                │              │            │            │
+    │─GET /diff────────▶│               │              │            │            │
+    │◀─{diff + items}──│                │              │            │            │
 ```
 
 ---
@@ -715,23 +886,32 @@ For production: show "processing" banner, poll status, render when complete.
 
 | Component | Recommended | Rationale |
 |---|---|---|
-| API layer | Existing IPP BFF (Go or Ruby) | No new service for v1 |
-| Worker | Async job via existing job framework (Sidekiq / Temporal) | Fits IPP infra patterns |
+| API layer | Existing IPP BFF (Go or Ruby), **GraphQL** | Matches existing Apollo/GraphQL frontend stack |
+| Worker (hackathon) | Synchronous inline processing | No async infra needed for demo with mock data |
+| Worker (production) | **Temporal workflows** | Phase-level checkpointing, retry, dedup |
 | Storage | PostgreSQL (existing IPP DB) | Relational joins for diff computation |
 | File storage | S3/GCS (existing) | Retailer files already land here via data-ingestion |
 | PLS client | gRPC via `product-retrieval` service mesh | Existing internal RPC |
-| AI summary | Claude API (or internal LLM gateway) | Plain-language diff explanation |
+| AI summary | Claude API (or internal LLM gateway), **async** | Non-blocking; UI shows placeholder until ready |
 | Cache | Redis — cache latest snapshot per retailer | Avoid DB read on every upload |
 
 ---
 
 ## Open Questions for Production
 
-| # | Question | Owner | Impact |
-|---|---|---|---|
-| 1 | Does data-ingestion retain raw feed files, and for how long? | Data-ingestion team | Determines if we can use Option B (raw file comparison) as a faster bridge |
-| 2 | Is there an existing audit/history mechanism in the catalog store? | Alejandro Lujan | Could replace `feed_snapshots` table entirely |
-| 3 | What is the PLS rate limit for the background tier? | #prj-product-code-matching | Determines max concurrency for batch calls |
-| 4 | How should mismatch thresholds be configured per retailer? | Kyle Lydon (PM) | Some retailers may want stricter or looser matching |
-| 5 | Should the AI summary use Claude or an internal model? | Eng leadership | Cost, latency, and data residency implications |
-| 6 | Column mapping: self-service UI or TAM-configured? | Karin Comas (PM) | Determines if we need a mapping editor in IPP |
+| # | Question | Owner | Impact | Notes (from review) |
+|---|---|---|---|---|
+| 1 | Does data-ingestion retain raw feed files, and for how long? | Data-ingestion team | Determines if we can use Option B (raw file comparison) as a faster bridge | If yes, reuse those S3 paths instead of storing files again |
+| 2 | Is there an existing audit/history mechanism in the catalog store? | Alejandro Lujan | Could replace `feed_snapshots` table entirely | If this exists, it's a big simplification — worth investigating before building |
+| 3 | What is the PLS rate limit for the background tier? | #prj-product-code-matching | Determines max concurrency for batch calls | Drives batch parallelism and whether we need a circuit breaker |
+| 4 | How should mismatch thresholds be configured per retailer? | Kyle Lydon (PM) | Some retailers may want stricter or looser matching | Start with global defaults, add per-retailer overrides later if needed |
+| 5 | Should the AI summary use Claude or an internal model? | Eng leadership | Cost, latency, and data residency implications | Internal model if available (avoids sending retailer data externally). Claude with PII stripping as fallback |
+| 6 | Column mapping: self-service UI or TAM-configured? | Karin Comas (PM) | Determines if we need a mapping editor in IPP | TAM-only for v1 — self-service needs a validation UI which is a project in itself |
+
+## Scalability Notes (post-hackathon)
+
+The design targets up to 100k SKUs, which is fine for now. For larger retailers (500k+ SKUs), the main concerns are:
+- **`feed_items` table growth** — need partitioning by `uploaded_at` or `retailer_id`
+- **`feed_snapshot_items`** — 500k rows per retailer, 1000 retailers = 500M rows unpartitioned
+- **Redis snapshot cache** — 500k rows won't fit in a single key, need a different serialization/sharding strategy
+- **PLS response caching** — most scan codes don't change between uploads, so caching `scan_code → product_id` with a 24h TTL would cut PLS load significantly

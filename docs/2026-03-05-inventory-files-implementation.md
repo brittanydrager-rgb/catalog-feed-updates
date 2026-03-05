@@ -330,4 +330,3 @@ In the "Completed with warnings" panel, click "View affected items" on an anomal
 | 8 | E2E verification | Manual — all 4 status flows + upload |
 
 Tasks 1-5 are independent and can be parallelized. Task 6 depends on all of 1-5. Task 7 depends on 6. Task 8 depends on all.
-
