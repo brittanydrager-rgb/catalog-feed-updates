@@ -99,7 +99,7 @@
   height: 100%;
   background: #0A5546;
   border-radius: 2px;
-  animation: progress-fill 2.2s ease-out forwards;
+  animation: progress-fill 2s ease-out forwards;
 }
 
 @keyframes progress-fill {
@@ -111,6 +111,12 @@
   font-size: 16px;
   font-weight: 600;
   color: #343538;
+  margin: 0;
+}
+
+.feed-upload__processing-phase {
+  font-size: 13px;
+  color: #56595E;
   margin: 0;
 }
 

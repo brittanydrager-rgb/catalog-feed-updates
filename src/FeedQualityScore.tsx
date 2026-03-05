@@ -1,14 +1,21 @@
+import { useEffect, useRef, useState } from 'react'
 import {
   QUALITY_SCORE,
   QUALITY_SCORE_BREAKDOWN,
   QUALITY_SCORE_TREND,
 } from './mockDiff'
+import { fetchQuality } from './api'
+import { track } from './analytics/events'
 import './FeedQualityScore.css'
 
-function Sparkline({ data }: { data: number[] }) {
+interface Props {
+  uploadId?: string
+}
+
+function Sparkline({ data, onHover }: { data: number[]; onHover?: () => void }) {
   const width = 120
   const height = 32
-  const padding = 6 // room for the endpoint circle
+  const padding = 6
 
   const min = Math.min(...data)
   const max = Math.max(...data)
@@ -30,6 +37,7 @@ function Sparkline({ data }: { data: number[] }) {
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       aria-hidden="true"
+      onMouseEnter={onHover}
     >
       <polyline
         points={polylinePoints}
@@ -44,10 +52,102 @@ function Sparkline({ data }: { data: number[] }) {
   )
 }
 
-export default function FeedQualityScore() {
-  const { score, catalogReadyCount, totalCount, notReadyCount } = QUALITY_SCORE
+export default function FeedQualityScore({ uploadId }: Props) {
+  const [realData, setRealData] = useState<{
+    score: number
+    catalogReadyCount: number
+    totalCount: number
+    notReadyCount: number
+    breakdown: { field: string; count: number }[]
+    trend: number[]
+  } | null>(null)
+
+  const hasTrackedScore = useRef(false)
+  const hasTrackedBreakdown = useRef(false)
+  const hasTrackedTrend = useRef(false)
+
+  // Fetch real data when uploadId is provided
+  useEffect(() => {
+    if (!uploadId) {
+      setRealData(null)
+      return
+    }
+
+    let cancelled = false
+    fetchQuality().then(result => {
+      if (cancelled) return
+      const q = result.feedQuality
+      if (!q.current) return
+      setRealData({
+        score: q.current.score,
+        catalogReadyCount: q.current.catalogReadyCount,
+        totalCount: q.current.totalCount,
+        notReadyCount: q.current.notReadyCount,
+        breakdown: q.current.breakdown.filter(b => b.field !== 'missing_price'),
+        trend: q.trend.map(t => t.score).reverse(),
+      })
+    }).catch(err => console.error('[FeedQualityScore] fetch error:', err))
+
+    return () => { cancelled = true }
+  }, [uploadId])
+
+  const score = realData?.score ?? QUALITY_SCORE.score
+  const catalogReadyCount = realData?.catalogReadyCount ?? QUALITY_SCORE.catalogReadyCount
+  const totalCount = realData?.totalCount ?? QUALITY_SCORE.totalCount
+  const notReadyCount = realData?.notReadyCount ?? QUALITY_SCORE.notReadyCount
+  const breakdown = realData?.breakdown ?? QUALITY_SCORE_BREAKDOWN
+  const trend = realData?.trend ?? QUALITY_SCORE_TREND
+
   const isPerfect = score === 100
   const isLow = score < 50
+
+  // Track score_viewed on render
+  useEffect(() => {
+    if (!hasTrackedScore.current) {
+      hasTrackedScore.current = true
+      track({
+        event: 'catalog_quality_score_viewed',
+        retailer_id: 'mock-retailer',
+        feed_id: uploadId ?? 'mock-feed',
+        score_pct: score,
+        catalog_ready_count: catalogReadyCount,
+        total_count: totalCount,
+        not_ready_count: notReadyCount,
+      })
+    }
+  }, [])
+
+  // Track breakdown_viewed when breakdown is rendered
+  useEffect(() => {
+    if (!hasTrackedBreakdown.current && notReadyCount > 0) {
+      hasTrackedBreakdown.current = true
+      track({
+        event: 'catalog_quality_breakdown_viewed',
+        retailer_id: 'mock-retailer',
+        feed_id: uploadId ?? 'mock-feed',
+        score_pct: score,
+      })
+    }
+  }, [notReadyCount, score])
+
+  function handleSparklineHover() {
+    if (hasTrackedTrend.current) return
+    hasTrackedTrend.current = true
+    const direction = trend[trend.length - 1] > trend[0] ? 'up' as const
+      : trend[trend.length - 1] < trend[0] ? 'down' as const
+      : 'flat' as const
+    track({
+      event: 'catalog_quality_trend_viewed',
+      retailer_id: 'mock-retailer',
+      feed_id: uploadId ?? 'mock-feed',
+      trend_direction: direction,
+    })
+  }
+
+  // Format breakdown field names for display
+  function formatField(field: string): string {
+    return field.replace(/^missing_/, '').replace(/_/g, ' ')
+  }
 
   return (
     <div className={`quality-score${isLow ? ' quality-score--warning' : ''}`}>
@@ -93,10 +193,10 @@ export default function FeedQualityScore() {
             {notReadyCount} products need attention
           </div>
           <div className="quality-score__breakdown">
-            {QUALITY_SCORE_BREAKDOWN.map(
+            {breakdown.map(
               (entry, i) =>
-                `${entry.count} missing ${entry.field}${
-                  i < QUALITY_SCORE_BREAKDOWN.length - 1 ? ' \u00B7 ' : ''
+                `${entry.count} missing ${formatField(entry.field)}${
+                  i < breakdown.length - 1 ? ' \u00B7 ' : ''
                 }`,
             ).join('')}
           </div>
@@ -104,7 +204,9 @@ export default function FeedQualityScore() {
       )}
 
       {/* Sparkline */}
-      <Sparkline data={QUALITY_SCORE_TREND} />
+      {trend.length > 1 && (
+        <Sparkline data={trend} onHover={handleSparklineHover} />
+      )}
     </div>
   )
 }

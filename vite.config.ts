@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     allowedHosts: ['.ts.net'],
+    proxy: {
+      '/api': 'http://localhost:4000',
+      '/graphql': 'http://localhost:4000',
+    },
   },
   test: {
     environment: 'jsdom',
