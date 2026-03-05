@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import FeedUpload from './FeedUpload'
 import DiffDetailPanel from './DiffDetailPanel'
+import type { UploadResult } from './api'
 import './MainPage.css'
 
 interface FileRow {
@@ -12,6 +13,8 @@ interface FileRow {
   status: 'Completed' | 'Completed with warnings' | 'Rejected' | 'Rejected - Mismatch'
   items: string
   isNew?: boolean
+  uploadId?: string
+  diffId?: string
 }
 
 const MOCK_FILES: FileRow[] = [
@@ -23,6 +26,16 @@ const MOCK_FILES: FileRow[] = [
   { date: 'Mar 5, 2026',  time: '7:35 AM',  banner: 'The Garden',    area: 'Catalog_UAT CAT1',  filename: 'smoke_test_inventory_file_reinventory__version_1__2026-03-05_07-35-04.csv.gz', status: 'Completed',              items: '10' },
   { date: 'Mar 5, 2026',  time: '7:32 AM',  banner: 'The Garden',    area: 'Catalog_UAT CAT2',  filename: 'smoke_test_inventory_file_feeda__version_1__2026-03-05_07-32-33.csv.gz',      status: 'Completed',              items: '2' },
 ]
+
+function mapUploadStatus(status: string): FileRow['status'] {
+  switch (status) {
+    case 'completed': return 'Completed'
+    case 'completed_with_warnings': return 'Completed with warnings'
+    case 'rejected_missing_fields': return 'Rejected'
+    case 'rejected_mismatch': return 'Rejected - Mismatch'
+    default: return 'Completed with warnings'
+  }
+}
 
 const STATUS_TOOLTIPS: Record<FileRow['status'], string> = {
   'Completed': 'All items were uploaded and processed successfully.',
@@ -81,36 +94,46 @@ export default function MainPage() {
   const [uploadedFile, setUploadedFile] = useState('')
   const [activeFileStatus, setActiveFileStatus] = useState<FileRow['status']>('Completed with warnings')
   const [files, setFiles] = useState<FileRow[]>(MOCK_FILES)
+  // Real backend data for the selected row
+  const [selectedUploadId, setSelectedUploadId] = useState<string | undefined>()
+  const [selectedDiffId, setSelectedDiffId] = useState<string | undefined>()
 
-  function handleUploadComplete(filename: string) {
+  function handleUploadComplete(filename: string, result: UploadResult) {
     const now = new Date()
     const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    const fileStatus = mapUploadStatus(result.status)
     const newRow: FileRow = {
       date: 'Mar 5, 2026',
       time,
-      banner: 'The Garden',
-      area: 'Catalog_UAT CAT2',
+      banner: 'Kroger',
+      area: 'Full Catalog',
       filename,
-      status: 'Completed with warnings',
-      items: '14',
+      status: fileStatus,
+      items: String(result.totalRows),
       isNew: true,
+      uploadId: result.uploadId,
+      diffId: result.diffId ?? undefined,
     }
     setFiles(prev => [newRow, ...prev])
     setUploadedFile(filename)
-    setActiveFileStatus('Completed with warnings')
+    setActiveFileStatus(fileStatus)
+    setSelectedUploadId(result.uploadId)
+    setSelectedDiffId(result.diffId ?? undefined)
     setPanelOpen(true)
   }
 
-  function handleViewSummary(filename: string, status: FileRow['status']) {
-    setUploadedFile(filename)
-    setActiveFileStatus(status)
+  function handleViewSummary(row: FileRow) {
+    setUploadedFile(row.filename)
+    setActiveFileStatus(row.status)
+    setSelectedUploadId(row.uploadId)
+    setSelectedDiffId(row.diffId)
     setPanelOpen(true)
   }
 
   return (
     <div className="main-page">
 
-      {/* ── Page header ───────────────────────────────────────── */}
+      {/* Page header */}
       <div className="inv-page-header">
         <div>
           <h1 className="inv-page-title">View inventory files</h1>
@@ -123,10 +146,10 @@ export default function MainPage() {
 
       <div className="main-page__content">
 
-        {/* ── Upload zone ───────────────────────────────────────── */}
+        {/* Upload zone */}
         <FeedUpload onComplete={handleUploadComplete} triggerRef={uploadRef} />
 
-        {/* ── Filter bar ───────────────────────────────────────── */}
+        {/* Filter bar */}
         <div className="inv-filters">
           <div className="inv-search">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M7 12A5 5 0 1 0 7 2a5 5 0 0 0 0 10ZM14 14l-2.5-2.5" stroke="#C8CACD" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -140,7 +163,7 @@ export default function MainPage() {
           ))}
         </div>
 
-        {/* ── File table ───────────────────────────────────────── */}
+        {/* File table */}
         <table className="inv-table">
           <thead>
             <tr>
@@ -174,7 +197,7 @@ export default function MainPage() {
                 <td>
                   <button
                     className="inv-btn inv-btn--outline inv-btn--sm"
-                    onClick={() => handleViewSummary(row.filename, row.status)}
+                    onClick={() => handleViewSummary(row)}
                   >
                     View summary
                   </button>
@@ -190,6 +213,8 @@ export default function MainPage() {
         activeTabId={null}
         uploadedFile={uploadedFile}
         fileStatus={activeFileStatus}
+        uploadId={selectedUploadId}
+        diffId={selectedDiffId}
         onClose={() => setPanelOpen(false)}
       />
     </div>

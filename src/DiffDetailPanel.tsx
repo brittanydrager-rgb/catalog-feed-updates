@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DIFF_CATEGORIES, DIFF_SUMMARY, FAILED_CATEGORIES, MISSING_FIELDS_SUMMARY, MISMATCH_SUMMARY, type DiffCategory } from './mockDiff'
+import { fetchDiff, fetchDiffItems, type DiffItemData } from './api'
 import FeedQualityScore from './FeedQualityScore'
 import AnomalyAlerts from './AnomalyAlerts'
+import { track } from './analytics/events'
 import './DiffDetailPanel.css'
 
 type FileStatus = 'Completed' | 'Completed with warnings' | 'Rejected' | 'Rejected - Mismatch'
@@ -11,21 +13,183 @@ interface Props {
   activeTabId: string | null
   uploadedFile: string
   fileStatus?: FileStatus
+  uploadId?: string
+  diffId?: string
   onClose: () => void
 }
 
-export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileStatus = 'Completed with warnings', onClose }: Props) {
+// Map backend diff data into the DiffCategory format the UI expects
+function buildCategoriesFromItems(items: DiffItemData[]): DiffCategory[] {
+  // Group by change_type
+  const added = items.filter(i => i.changeType === 'added')
+  const changed = items.filter(i => i.changeType === 'changed')
+  const removed = items.filter(i => i.changeType === 'removed')
+
+  // Sub-group changed items by field type
+  const qualityIssues = changed.filter(i => i.severity === 'critical' || i.notReadyReasons.length > 0)
+  const priceChanges = changed.filter(i => i.fieldChanges.some(fc => fc.field === 'price' || fc.field === 'sale_price'))
+  const uomChanges = changed.filter(i => i.fieldChanges.some(fc => fc.field === 'cost_unit'))
+  const sizeChanges = changed.filter(i => i.fieldChanges.some(fc => fc.field === 'size'))
+  const otherChanges = changed.filter(i =>
+    !qualityIssues.includes(i) && !priceChanges.includes(i) &&
+    !uomChanges.includes(i) && !sizeChanges.includes(i)
+  )
+
+  function mapItems(list: DiffItemData[]) {
+    return list.map((item, idx) => ({
+      id: `real-${item.scanCode}-${idx}`,
+      scanCode: item.scanCode || '',
+      productName: item.productName || item.scanCode || 'Unknown',
+      brand: '',
+      changeType: item.changeType as 'added' | 'removed' | 'changed',
+      highSeverity: item.severity === 'critical',
+      changes: item.fieldChanges.map(fc => ({
+        field: fc.field,
+        previous: fc.previous ?? '(empty)',
+        current: fc.current ?? '(empty)',
+        highSeverity: fc.isHighSeverity,
+      })),
+    }))
+  }
+
+  const categories: DiffCategory[] = []
+
+  if (qualityIssues.length > 0) {
+    categories.push({
+      id: 'sellability', label: 'Catalog quality issues',
+      description: 'Missing or removed data affecting storefront discoverability',
+      changeType: 'changed', count: qualityIssues.length,
+      highSeverity: true, severity: 'critical', items: mapItems(qualityIssues),
+    })
+  }
+  if (uomChanges.length > 0) {
+    categories.push({
+      id: 'uom', label: 'Unit of measure changes',
+      description: 'Items where cost_unit changed',
+      changeType: 'changed', count: uomChanges.length,
+      highSeverity: true, severity: 'critical', items: mapItems(uomChanges),
+    })
+  }
+  if (sizeChanges.length > 0) {
+    categories.push({
+      id: 'size', label: 'Size changes',
+      description: 'Items where the size descriptor changed',
+      changeType: 'changed', count: sizeChanges.length,
+      severity: 'warning', items: mapItems(sizeChanges),
+    })
+  }
+  if (removed.length > 0) {
+    categories.push({
+      id: 'availability', label: 'Removed items',
+      description: 'Items removed from the feed',
+      changeType: 'removed', count: removed.length,
+      severity: 'warning', items: mapItems(removed),
+    })
+  }
+  if (priceChanges.length > 0) {
+    categories.push({
+      id: 'price-promo', label: 'Price & promo updates',
+      description: 'Changes to price or sale price',
+      changeType: 'changed', count: priceChanges.length,
+      severity: 'info', items: mapItems(priceChanges),
+    })
+  }
+  if (added.length > 0) {
+    categories.push({
+      id: 'added', label: 'New items',
+      description: 'Items newly added in this file',
+      changeType: 'added', count: added.length,
+      severity: 'info', items: mapItems(added),
+    })
+  }
+  if (otherChanges.length > 0) {
+    categories.push({
+      id: 'other', label: 'Other changes',
+      description: 'Other field changes',
+      changeType: 'changed', count: otherChanges.length,
+      severity: 'info', items: mapItems(otherChanges),
+    })
+  }
+
+  return categories
+}
+
+export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileStatus = 'Completed with warnings', uploadId, diffId, onClose }: Props) {
   const isRejectedMissingFields = fileStatus === 'Rejected'
   const isRejectedMismatch      = fileStatus === 'Rejected - Mismatch'
   const isRejected              = isRejectedMissingFields || isRejectedMismatch
+  const useRealData             = !!(diffId && uploadId) && !isRejected
 
+  // Real data state
+  const [realCategories, setRealCategories] = useState<DiffCategory[] | null>(null)
+  const [realSummary, setRealSummary] = useState<{ qualityIssues: number; pricePromoUpdates: number; uomSizeChanges: number; newItems: number } | null>(null)
+  const [realAiSummary, setRealAiSummary] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  // Fetch real data when diffId changes
+  useEffect(() => {
+    if (!useRealData || !diffId) {
+      setRealCategories(null)
+      setRealSummary(null)
+      setRealAiSummary(null)
+      return
+    }
+
+    let cancelled = false
+    setLoading(true)
+
+    async function load() {
+      try {
+        // Fetch diff overview + first page of items
+        const [diffResult, itemsResult] = await Promise.all([
+          fetchDiff(diffId!),
+          fetchDiffItems(diffId!, { perPage: 200 }),
+        ])
+
+        if (cancelled) return
+
+        const diff = diffResult.feedDiff
+        if (!diff) return
+
+        const cats = buildCategoriesFromItems(itemsResult.feedDiffItems.items)
+        setRealCategories(cats)
+
+        // Build summary from diff overview
+        const qualityCount = cats.find(c => c.id === 'sellability')?.count ?? 0
+        const priceCount = cats.find(c => c.id === 'price-promo')?.count ?? 0
+        const uomCount = (cats.find(c => c.id === 'uom')?.count ?? 0) + (cats.find(c => c.id === 'size')?.count ?? 0)
+        setRealSummary({
+          qualityIssues: qualityCount,
+          pricePromoUpdates: priceCount,
+          uomSizeChanges: uomCount,
+          newItems: diff.addedCount,
+        })
+
+        setRealAiSummary(diff.aiSummary)
+      } catch (err) {
+        console.error('[DiffDetailPanel] Failed to fetch real data:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [diffId, useRealData])
+
+  // Determine categories to render
   const categories = isRejectedMissingFields
     ? FAILED_CATEGORIES.filter(c => c.id === 'missing-data')
     : isRejectedMismatch
     ? FAILED_CATEGORIES.filter(c => c.id === 'mismatch')
+    : useRealData && realCategories
+    ? realCategories
     : DIFF_CATEGORIES
 
-  const [activeTab, setActiveTab] = useState<string>(categories[0].id)
+  const summary = useRealData && realSummary ? realSummary : DIFF_SUMMARY
+
+  const [activeTab, setActiveTab] = useState<string>(categories[0]?.id ?? '')
+  const hasTrackedPageView = useRef(false)
 
   // Sync active tab when parent changes selection or status changes
   useEffect(() => {
@@ -33,8 +197,42 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
   }, [activeTabId])
 
   useEffect(() => {
-    setActiveTab(categories[0].id)
-  }, [fileStatus])
+    if (categories.length > 0) setActiveTab(categories[0].id)
+  }, [fileStatus, realCategories])
+
+  // Track page view when panel opens
+  useEffect(() => {
+    if (open && !isRejected && !hasTrackedPageView.current) {
+      hasTrackedPageView.current = true
+      const added = categories.find(c => c.id === 'added')?.count ?? 0
+      const removed = categories.find(c => c.id === 'availability')?.count ?? 0
+      const changed = categories
+        .filter(c => c.id !== 'added' && c.id !== 'availability')
+        .reduce((sum, c) => sum + c.count, 0)
+      track({
+        event: 'catalog_diff_page_viewed',
+        retailer_id: 'mock-retailer',
+        feed_id: uploadedFile,
+        feed_date: 'Mar 5, 2026',
+        total_added: added,
+        total_removed: removed,
+        total_changed: changed,
+      })
+    }
+    if (!open) {
+      hasTrackedPageView.current = false
+    }
+  }, [open, isRejected, uploadedFile])
+
+  function handleTabChange(tabId: string) {
+    setActiveTab(tabId)
+    track({
+      event: 'catalog_diff_filter_applied',
+      retailer_id: 'mock-retailer',
+      feed_id: uploadedFile,
+      filter_type: tabId,
+    })
+  }
 
   if (!open) return null
 
@@ -46,7 +244,7 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
       <div className="ddp-backdrop" onClick={onClose} />
       <aside className="ddp">
 
-        {/* ── Header ───────────────────────────────── */}
+        {/* Header */}
         <div className="ddp__header">
           <div>
             <h2 className="ddp__title">Inventory file summary</h2>
@@ -62,10 +260,15 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
           </button>
         </div>
 
-        {/* ── Scrollable body ───────────────────────── */}
+        {/* Scrollable body */}
         <div className="ddp__body">
 
+          {loading && (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#717182' }}>Loading diff data...</div>
+          )}
+
           {/* Stats */}
+          {!loading && (
           <section>
             <h3 className="ddp__section-heading">
               {isRejectedMissingFields ? 'Rejection details: Missing fields'
@@ -110,25 +313,27 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
               <div className="ddp__stats">
                 <div className="ddp__stat">
                   <span className="ddp__stat-label">Catalog quality issues</span>
-                  <span className="ddp__stat-value ddp__stat-value--warn">{DIFF_SUMMARY.qualityIssues}</span>
+                  <span className="ddp__stat-value ddp__stat-value--warn">{summary.qualityIssues}</span>
                 </div>
                 <div className="ddp__stat">
                   <span className="ddp__stat-label">Price & promo updates</span>
-                  <span className="ddp__stat-value">{DIFF_SUMMARY.pricePromoUpdates}</span>
+                  <span className="ddp__stat-value">{summary.pricePromoUpdates}</span>
                 </div>
                 <div className="ddp__stat">
                   <span className="ddp__stat-label">UoM & size changes</span>
-                  <span className="ddp__stat-value ddp__stat-value--warn">{DIFF_SUMMARY.uomSizeChanges}</span>
+                  <span className="ddp__stat-value ddp__stat-value--warn">{summary.uomSizeChanges}</span>
                 </div>
                 <div className="ddp__stat">
                   <span className="ddp__stat-label">New items</span>
-                  <span className="ddp__stat-value">{DIFF_SUMMARY.newItems}</span>
+                  <span className="ddp__stat-value">{summary.newItems}</span>
                 </div>
               </div>
             )}
           </section>
+          )}
 
           {/* AI Digest */}
+          {!loading && (
           <section className="ddp__digest">
             <div className="ddp__digest-header">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="ddp__digest-icon">
@@ -151,17 +356,18 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
                 and a size format inconsistency on Item G. <strong>No changes were applied</strong> — review the
                 conflicts below, correct the feed values to match catalog data, and re-upload.
               </p>
+            ) : realAiSummary ? (
+              <p className="ddp__digest-text">{realAiSummary}</p>
             ) : (
               <p className="ddp__digest-text">
-                Your March 5 feed was accepted with <strong>4 catalog quality issues</strong> to review.
-                Two items are <strong>missing product images</strong> which reduces storefront visibility, and one item
-                lost nutritional data. <strong>2 unit-of-measure changes</strong> were detected — a <code>lb</code> → <code>each</code>{' '}
-                flip on Item D may affect weight-based pricing. <strong>5 price or promo updates</strong> were applied,
-                including a new <code>percent_off</code> promotion on Insta Carrot Kit and a removed sale on Item G.
-                <strong> 3 size descriptor changes</strong> and <strong>2 new items</strong> were also added.
+                Your March 5 feed was accepted with <strong>{summary.qualityIssues} catalog quality issues</strong> to review.
+                {summary.newItems > 0 && <> <strong>{summary.newItems} new items</strong> were added.</>}
+                {summary.uomSizeChanges > 0 && <> <strong>{summary.uomSizeChanges} unit-of-measure/size changes</strong> detected.</>}
+                {summary.pricePromoUpdates > 0 && <> <strong>{summary.pricePromoUpdates} price or promo updates</strong> applied.</>}
               </p>
             )}
           </section>
+          )}
 
           {/* Rejection error / Warnings */}
           {isRejected ? (
@@ -196,21 +402,23 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
             </section>
           ) : null}
 
-          {/* Feed Quality Score — only for non-rejected statuses */}
+          {/* Feed Quality Score */}
           {!isRejected && (
             <section>
-              <FeedQualityScore />
+              <FeedQualityScore uploadId={uploadId} />
             </section>
           )}
 
-          {/* Anomaly Alerts — only for non-rejected statuses */}
+          {/* Anomaly Alerts */}
           {!isRejected && (
             <section>
-              <AnomalyAlerts onViewItems={(tabId) => setActiveTab(tabId)} />
+              <AnomalyAlerts uploadId={uploadId} onViewItems={(tabId) => setActiveTab(tabId)} />
             </section>
           )}
 
           {/* Tabs */}
+          {!loading && categories.length > 0 && (
+          <>
           <div className="ddp__tabs-wrap">
             <div className="ddp__tabs" role="tablist">
               {categories.map(cat => (
@@ -219,7 +427,7 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
                   role="tab"
                   aria-selected={activeTab === cat.id}
                   className={`ddp__tab ${activeTab === cat.id ? 'ddp__tab--active' : ''}`}
-                  onClick={() => setActiveTab(cat.id)}
+                  onClick={() => handleTabChange(cat.id)}
                 >
                   {!isRejected && cat.severity && <SeverityIcon severity={cat.severity} />}
                   {cat.label} ({cat.count})
@@ -231,8 +439,10 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
 
           {/* Tab content — item table */}
           <div className="ddp__tab-content">
-            <ItemTable category={currentCategory} />
+            {currentCategory && <ItemTable category={currentCategory} />}
           </div>
+          </>
+          )}
 
         </div>
       </aside>
@@ -240,7 +450,7 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
   )
 }
 
-// ── Severity icon for tabs ───────────────────────────────────────────────
+// Severity icon for tabs
 
 function SeverityIcon({ severity }: { severity: 'critical' | 'warning' | 'info' }) {
   if (severity === 'critical') {
@@ -270,7 +480,7 @@ function SeverityIcon({ severity }: { severity: 'critical' | 'warning' | 'info' 
   )
 }
 
-// ── Item table inside each tab ──────────────────────────────────────────
+// Item table inside each tab
 
 function ItemTable({ category }: { category: DiffCategory }) {
   if (category.items.length === 0) {

@@ -1,25 +1,55 @@
 import { useImperativeHandle, useRef, useState } from 'react'
+import { uploadFile, type UploadResult } from './api'
 import './FeedUpload.css'
 
-type UploadState = 'idle' | 'processing'
+type UploadState = 'idle' | 'processing' | 'error'
 
 interface Props {
-  onComplete: (filename: string) => void
+  onComplete: (filename: string, result: UploadResult) => void
   triggerRef?: React.Ref<{ trigger: () => void }>
 }
 
+const PHASE_NAMES = [
+  'Parsing file...',
+  'Validating fields...',
+  'Matching products...',
+  'Computing diff...',
+  'Scoring quality...',
+]
+
 export default function FeedUpload({ onComplete, triggerRef }: Props) {
   const [state, setState] = useState<UploadState>('idle')
-  const [dragging, setDragging] = useState(false)
   const [filename, setFilename] = useState('')
+  const [phaseName, setPhaseName] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useImperativeHandle(triggerRef, () => ({ trigger: () => inputRef.current?.click() }))
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     setFilename(file.name)
     setState('processing')
-    setTimeout(() => { setState('idle'); onComplete(file.name) }, 2200)
+    setErrorMsg('')
+
+    // Cycle through phase names while waiting for the real upload
+    let phaseIdx = 0
+    setPhaseName(PHASE_NAMES[0])
+    const interval = setInterval(() => {
+      phaseIdx = Math.min(phaseIdx + 1, PHASE_NAMES.length - 1)
+      setPhaseName(PHASE_NAMES[phaseIdx])
+    }, 400)
+
+    try {
+      const result = await uploadFile(file)
+      clearInterval(interval)
+      setState('idle')
+      onComplete(file.name, result)
+    } catch (err) {
+      clearInterval(interval)
+      setState('error')
+      setErrorMsg(err instanceof Error ? err.message : 'Upload failed')
+    }
   }
 
   function onDrop(e: React.DragEvent) {
@@ -45,12 +75,23 @@ export default function FeedUpload({ onComplete, triggerRef }: Props) {
             </svg>
           </div>
           <p className="feed-upload__processing-title">Analyzing your feed...</p>
+          <p className="feed-upload__processing-phase">{phaseName}</p>
           <div className="feed-upload__progress-track">
             <div className="feed-upload__progress-bar" />
           </div>
           <p className="feed-upload__processing-file">{filename}</p>
-          <p className="feed-upload__processing-sub">Comparing against your last feed from Feb 28, 2026</p>
+          <p className="feed-upload__processing-sub">Comparing against your last feed</p>
         </div>
+      </div>
+    )
+  }
+
+  if (state === 'error') {
+    return (
+      <div className="feed-upload feed-upload--error" onClick={() => setState('idle')}>
+        <p className="feed-upload__title" style={{ color: '#C5280C' }}>Upload failed</p>
+        <p className="feed-upload__sub">{errorMsg}</p>
+        <p className="feed-upload__formats">Click to try again</p>
       </div>
     )
   }
