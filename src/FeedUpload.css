@@ -82,18 +82,29 @@
   gap: 10px;
 }
 
-.feed-upload__spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #C2DDD8;
-  border-top-color: #0A5546;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 8px;
+.feed-upload__doc-icon {
+  margin-bottom: 12px;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.feed-upload__progress-track {
+  width: 200px;
+  height: 4px;
+  background: #E8E9EB;
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+
+.feed-upload__progress-bar {
+  height: 100%;
+  background: #0A5546;
+  border-radius: 2px;
+  animation: progress-fill 2.2s ease-out forwards;
+}
+
+@keyframes progress-fill {
+  from { width: 0%; }
+  to { width: 90%; }
 }
 
 .feed-upload__processing-title {

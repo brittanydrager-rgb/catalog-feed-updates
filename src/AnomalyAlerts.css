@@ -1,0 +1,79 @@
+/* ── Container ────────────────────────────────────────────────────────── */
+.anomaly-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────── */
+.anomaly-alerts__card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #FEF9EC;
+  border-left: 3px solid #A06400;
+  border-radius: 0 4px 4px 0;
+}
+
+/* ── Icon ─────────────────────────────────────────────────────────────── */
+.anomaly-alerts__icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── Content ──────────────────────────────────────────────────────────── */
+.anomaly-alerts__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.anomaly-alerts__category {
+  font-size: 14px;
+  font-weight: 600;
+  color: #030213;
+  margin: 0 0 2px;
+}
+
+.anomaly-alerts__description {
+  font-size: 14px;
+  color: #343538;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── View-items link ──────────────────────────────────────────────────── */
+.anomaly-alerts__link {
+  color: #0d7a6a;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 14px;
+  padding: 0;
+}
+.anomaly-alerts__link:hover {
+  color: #0a5546;
+}
+
+/* ── Dismiss button ───────────────────────────────────────────────────── */
+.anomaly-alerts__dismiss {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0.55;
+  transition: opacity 0.12s;
+  padding: 0;
+  margin-top: 0;
+}
+.anomaly-alerts__dismiss:hover {
+  opacity: 1;
+}

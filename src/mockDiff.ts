@@ -1,5 +1,73 @@
 export type ChangeType = 'added' | 'removed' | 'changed'
 
+// ── Anomaly Alert types & data ────────────────────────────────────────────
+
+export interface AnomalyAlert {
+  id: string
+  type: 'bulk_name_change' | 'bulk_removal' | 'bulk_price_change' | 'alcohol_flag_change' | 'cost_unit_flip'
+  category: string
+  affectedCount: number
+  affectedPct: number
+  description: string
+  viewItemsTabId: string
+  isDismissible: boolean
+}
+
+export const ANOMALY_ALERTS: AnomalyAlert[] = [
+  {
+    id: 'alert-1',
+    type: 'bulk_name_change',
+    category: 'Produce',
+    affectedCount: 8,
+    affectedPct: 40,
+    description: '40% of items in your Produce category had their name change — did you mean to do this?',
+    viewItemsTabId: 'sellability',
+    isDismissible: true,
+  },
+  {
+    id: 'alert-2',
+    type: 'cost_unit_flip',
+    category: 'General',
+    affectedCount: 2,
+    affectedPct: 0,
+    description: '2 items changed their sell-by unit (EA↔LB) — this affects pricing calculation.',
+    viewItemsTabId: 'uom',
+    isDismissible: true,
+  },
+]
+
+// ── Feed Quality Score types & data ───────────────────────────────────────
+
+export interface QualityScore {
+  score: number
+  catalogReadyCount: number
+  totalCount: number
+  notReadyCount: number
+}
+
+export interface QualityBreakdownEntry {
+  field: string
+  count: number
+}
+
+export const QUALITY_SCORE: QualityScore = {
+  score: 82,
+  catalogReadyCount: 410,
+  totalCount: 500,
+  notReadyCount: 90,
+}
+
+export const QUALITY_SCORE_BREAKDOWN: QualityBreakdownEntry[] = [
+  { field: 'scan code', count: 25 },
+  { field: 'brand name', count: 18 },
+  { field: 'category', count: 15 },
+  { field: 'price', count: 12 },
+  { field: 'size / weight', count: 11 },
+  { field: 'cost unit', count: 9 },
+]
+
+export const QUALITY_SCORE_TREND: number[] = [68, 71, 75, 78, 82]
+
 export interface FieldChange {
   field: string
   previous: string

@@ -1,17 +1,20 @@
-import { useRef, useState } from 'react'
+import { useImperativeHandle, useRef, useState } from 'react'
 import './FeedUpload.css'
 
 type UploadState = 'idle' | 'processing'
 
 interface Props {
   onComplete: (filename: string) => void
+  triggerRef?: React.Ref<{ trigger: () => void }>
 }
 
-export default function FeedUpload({ onComplete }: Props) {
+export default function FeedUpload({ onComplete, triggerRef }: Props) {
   const [state, setState] = useState<UploadState>('idle')
   const [dragging, setDragging] = useState(false)
   const [filename, setFilename] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useImperativeHandle(triggerRef, () => ({ trigger: () => inputRef.current?.click() }))
 
   function handleFile(file: File) {
     setFilename(file.name)
@@ -35,8 +38,16 @@ export default function FeedUpload({ onComplete }: Props) {
     return (
       <div className="feed-upload feed-upload--processing">
         <div className="feed-upload__processing-inner">
-          <div className="feed-upload__spinner" />
+          <div className="feed-upload__doc-icon">
+            <svg width="40" height="48" viewBox="0 0 40 48" fill="none">
+              <path d="M4 4C4 1.79 5.79 0 8 0H26L36 10V44C36 46.21 34.21 48 32 48H8C5.79 48 4 46.21 4 44V4Z" fill="#E8E9EB"/>
+              <path d="M26 0L36 10H30C27.79 10 26 8.21 26 6V0Z" fill="#C8CACD"/>
+            </svg>
+          </div>
           <p className="feed-upload__processing-title">Analyzing your feed...</p>
+          <div className="feed-upload__progress-track">
+            <div className="feed-upload__progress-bar" />
+          </div>
           <p className="feed-upload__processing-file">{filename}</p>
           <p className="feed-upload__processing-sub">Comparing against your last feed from Feb 28, 2026</p>
         </div>

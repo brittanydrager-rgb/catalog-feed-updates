@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { DIFF_CATEGORIES, DIFF_SUMMARY, FAILED_CATEGORIES, MISSING_FIELDS_SUMMARY, MISMATCH_SUMMARY, type DiffCategory } from './mockDiff'
+import FeedQualityScore from './FeedQualityScore'
+import AnomalyAlerts from './AnomalyAlerts'
 import './DiffDetailPanel.css'
 
 type FileStatus = 'Completed' | 'Completed with warnings' | 'Rejected' | 'Rejected - Mismatch'
@@ -193,6 +195,20 @@ export default function DiffDetailPanel({ open, activeTabId, uploadedFile, fileS
               </div>
             </section>
           ) : null}
+
+          {/* Feed Quality Score — only for non-rejected statuses */}
+          {!isRejected && (
+            <section>
+              <FeedQualityScore />
+            </section>
+          )}
+
+          {/* Anomaly Alerts — only for non-rejected statuses */}
+          {!isRejected && (
+            <section>
+              <AnomalyAlerts onViewItems={(tabId) => setActiveTab(tabId)} />
+            </section>
+          )}
 
           {/* Tabs */}
           <div className="ddp__tabs-wrap">

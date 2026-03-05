@@ -1,0 +1,99 @@
+/* ── Feed Quality Score panel ────────────────────────────────────────── */
+
+.quality-score {
+  background: #ffffff;
+  border: 1px solid #E8E9EB;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.quality-score--warning {
+  border-color: #A06400;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+
+.quality-score__header {
+  font-size: 15px;
+  font-weight: 600;
+  color: #343538;
+  margin: 0 0 12px;
+}
+
+/* ── Score value ────────────────────────────────────────────────────── */
+
+.quality-score__value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.quality-score__pct {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0A5546;
+  line-height: 1.2;
+}
+
+.quality-score__pct--perfect {
+  color: #277843;
+}
+
+.quality-score__pct--warning {
+  color: #A06400;
+}
+
+.quality-score__label {
+  font-size: 16px;
+  font-weight: 400;
+  color: #343538;
+}
+
+/* ── Perfect-score celebratory text ─────────────────────────────────── */
+
+.quality-score__perfect {
+  font-size: 14px;
+  font-weight: 600;
+  color: #277843;
+  margin-bottom: 4px;
+}
+
+/* ── Raw counts ─────────────────────────────────────────────────────── */
+
+.quality-score__counts {
+  font-size: 13px;
+  color: #717182;
+  margin-bottom: 12px;
+}
+
+/* ── Not-ready summary ──────────────────────────────────────────────── */
+
+.quality-score__attention {
+  font-size: 13px;
+  color: #A06400;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.quality-score__breakdown {
+  font-size: 13px;
+  color: #717182;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+/* ── Warning CTA ────────────────────────────────────────────────────── */
+
+.quality-score__cta {
+  font-size: 13px;
+  font-weight: 600;
+  color: #A06400;
+  margin-bottom: 12px;
+}
+
+/* ── Sparkline ──────────────────────────────────────────────────────── */
+
+.quality-score__sparkline {
+  display: block;
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import FeedUpload from './FeedUpload'
 import DiffDetailPanel from './DiffDetailPanel'
 import './MainPage.css'
@@ -76,6 +76,7 @@ function StatusBadge({ status }: { status: FileRow['status'] }) {
 }
 
 export default function MainPage() {
+  const uploadRef = useRef<{ trigger: () => void }>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [uploadedFile, setUploadedFile] = useState('')
   const [activeFileStatus, setActiveFileStatus] = useState<FileRow['status']>('Completed with warnings')
@@ -116,14 +117,14 @@ export default function MainPage() {
           <p className="inv-page-desc">Upload and review catalog feed files to catch issues before they affect your storefront.</p>
         </div>
         <div className="inv-page-actions">
-          <button className="inv-btn inv-btn--primary">Upload file</button>
+          <button className="inv-btn inv-btn--primary" onClick={() => uploadRef.current?.trigger()}>Upload file</button>
         </div>
       </div>
 
       <div className="main-page__content">
 
         {/* ── Upload zone ───────────────────────────────────────── */}
-        <FeedUpload onComplete={handleUploadComplete} />
+        <FeedUpload onComplete={handleUploadComplete} triggerRef={uploadRef} />
 
         {/* ── Filter bar ───────────────────────────────────────── */}
         <div className="inv-filters">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DIFF_CATEGORIES, DIFF_SUMMARY, type DiffCategory } from './mockDiff'
+import { DIFF_CATEGORIES, type DiffCategory } from './mockDiff'
 import DiffDetailPanel from './DiffDetailPanel'
 import './DiffTable.css'
 
@@ -26,13 +26,13 @@ export default function DiffTable({ uploadedFile }: Props) {
       <div className="diff-table">
         {/* Summary bar */}
         <div className="diff-table__summary">
-          <span className="diff-table__total">{DIFF_SUMMARY.total} changes detected</span>
+          <span className="diff-table__total">{DIFF_CATEGORIES.reduce((n, c) => n + c.count, 0)} changes detected</span>
           <span className="diff-table__dot">·</span>
-          <span className="diff-table__added-count">+{DIFF_SUMMARY.added} added</span>
+          <span className="diff-table__added-count">+{DIFF_CATEGORIES.filter(c => c.changeType === 'added').reduce((n, c) => n + c.count, 0)} added</span>
           <span className="diff-table__dot">·</span>
-          <span className="diff-table__removed-count">−{DIFF_SUMMARY.removed} removed</span>
+          <span className="diff-table__removed-count">−{DIFF_CATEGORIES.filter(c => c.changeType === 'removed').reduce((n, c) => n + c.count, 0)} removed</span>
           <span className="diff-table__dot">·</span>
-          <span className="diff-table__changed-count">{DIFF_SUMMARY.changed} updated</span>
+          <span className="diff-table__changed-count">{DIFF_CATEGORIES.filter(c => c.changeType === 'changed').reduce((n, c) => n + c.count, 0)} updated</span>
         </div>
 
         {/* Category table */}

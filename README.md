@@ -1,73 +1,60 @@
-# React + TypeScript + Vite
+# Catalog Feed Diff Viewer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Interactive Data Harmonization Portal — Hackathon Prototype for IPP**
 
-Currently, two official plugins are available:
+A prototype IPP (Instacart Partner Platform) feature that shows retailers a before/after diff of their catalog feed updates, helping them catch data quality issues before they affect their storefront.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Features
 
-## React Compiler
+- File upload with drag-and-drop + "Analyzing your feed..." processing state
+- File history table with 4 status types (Completed, Completed with warnings, Rejected: Missing fields, Rejected: Mismatch detected)
+- Full-screen summary panel with status-specific content
+- AI summary section with plain-language explanation of changes
+- Severity-sorted change tabs (Critical / Warning / Info)
+- Feed Quality Score with catalog-readiness percentage, breakdown, and sparkline trend
+- Category-level Anomaly Alerts with dismiss and "View affected items" linking
+- Rejection detail views for missing fields and catalog mismatches
+- "Also update" suggestions on mismatch items
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tech Stack
 
-## Expanding the ESLint configuration
+Vite, React 19, TypeScript, @instacart/tds, Plain CSS (BEM naming)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Getting Started
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+npm install
+npm run dev    # starts dev server at localhost:5173
+npm test       # runs Vitest smoke tests
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+> **Note:** `@instacart/tds` requires GitHub npm registry auth. See `.npmrc` configuration.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Project Structure
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+| File | Description |
+|---|---|
+| `App.tsx` | Root layout (TopNav + Sidebar + MainPage) |
+| `MainPage.tsx` | Inventory files page — upload zone, filter bar, file table |
+| `FeedUpload.tsx` | Drag-and-drop file upload with processing animation |
+| `DiffDetailPanel.tsx` | Full-screen summary panel — stats, AI summary, tabs, item tables |
+| `FeedQualityScore.tsx` | Catalog-readiness score with sparkline trend |
+| `AnomalyAlerts.tsx` | Dismissible category-level anomaly alert cards |
+| `mockDiff.ts` | All seeded mock data (diff categories, quality score, alerts) |
+| `TopNav.tsx` / `Sidebar.tsx` | IPP shell chrome |
+
+## Data
+
+All data is seeded mock data. No backend, no real file parsing. Any file dropped into the upload zone triggers the same mock diff scenario.
+
+## Production Path
+
+See the hackathon PRD for full context.
+
+- Production v1 would use post-ingestion catalog store snapshots (Option A)
+- The hackathon validates the UX for Phase 3 of the H1'26 Catalog Dashboard roadmap
+- Key production dependencies: data-ingestion file retention, PLS bulk matching API, diff computation service
+
+## Team
+
+Sonali Parthasarathy, Brittany Drager, Ren Chen
