@@ -1,0 +1,117 @@
+/* ── Summary bar ─────────────────────────────────────────────────────── */
+.diff-table__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #56595E;
+  margin-bottom: 16px;
+}
+
+.diff-table__total { font-weight: 600; color: #343538; }
+.diff-table__dot { color: #C8CACD; }
+.diff-table__added-count   { color: #277843; font-weight: 500; }
+.diff-table__removed-count { color: #C5280C; font-weight: 500; }
+.diff-table__changed-count { color: #56595E; font-weight: 500; }
+
+/* ── Table wrapper ───────────────────────────────────────────────────── */
+.diff-table__table-wrap {
+  border: 1px solid #E8E9EB;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.diff-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.diff-table__table thead th {
+  background: #F5F5F7;
+  color: #56595E;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 10px 16px;
+  text-align: left;
+  border-bottom: 1px solid #E8E9EB;
+}
+
+/* ── Data rows ───────────────────────────────────────────────────────── */
+.diff-table__row {
+  border-bottom: 1px solid #E8E9EB;
+  transition: background 0.1s;
+}
+.diff-table__row:last-child { border-bottom: none; }
+.diff-table__row:hover { background: #FAFAFA; }
+
+.diff-table__row--high-severity { background: #FFF8F7; }
+.diff-table__row--high-severity:hover { background: #FFF2F0; }
+
+.diff-table__row--selected { background: #F5FBF9; }
+.diff-table__row--selected:hover { background: #ECF6F3; }
+
+.diff-table__table tbody td {
+  padding: 14px 16px;
+  color: #343538;
+  vertical-align: middle;
+}
+
+/* ── Category cell ───────────────────────────────────────────────────── */
+.diff-table__badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.diff-table__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.diff-table__badge--review   { background: #FFF0EC; color: #C5280C; border: 1px solid #F5C4BB; }
+.diff-table__badge--added    { background: #EDFBF2; color: #277843; border: 1px solid #B7E8C8; }
+.diff-table__badge--removed  { background: #FFF0EC; color: #C5280C; border: 1px solid #F5C4BB; }
+.diff-table__badge--changed  { background: #F0F4FF; color: #2B4ECC; border: 1px solid #C0CCEE; }
+
+.diff-table__category-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #343538;
+}
+
+/* ── Description & count cells ───────────────────────────────────────── */
+.diff-table__description {
+  color: #56595E;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.diff-table__item-count {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: #343538;
+  white-space: nowrap;
+}
+
+/* ── Chevron ─────────────────────────────────────────────────────────── */
+.diff-table__chevron-cell {
+  width: 32px;
+  padding: 14px 12px 14px 4px !important;
+}
+
+.diff-table__chevron {
+  display: block;
+  transition: transform 0.2s;
+}
+.diff-table__chevron--open { transform: rotate(90deg); }

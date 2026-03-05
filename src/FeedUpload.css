@@ -1,0 +1,120 @@
+.feed-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed #C2DDD8;
+  border-radius: 12px;
+  padding: 36px 40px;
+  background: #FAFDFB;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+  text-align: center;
+}
+
+.feed-upload:hover,
+.feed-upload--dragging {
+  border-color: #0A5546;
+  background: #ECF6F3;
+}
+
+.feed-upload__input {
+  display: none;
+}
+
+.feed-upload__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #E3F3EF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  transition: background 0.15s;
+}
+
+.feed-upload:hover .feed-upload__icon,
+.feed-upload--dragging .feed-upload__icon {
+  background: #C2DDD8;
+}
+
+.feed-upload__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #343538;
+  margin: 0;
+}
+
+.feed-upload__sub {
+  font-size: 14px;
+  color: #56595E;
+  margin: 0;
+}
+
+.feed-upload__browse {
+  color: #0A5546;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.feed-upload__formats {
+  font-size: 12px;
+  color: #9B9FA8;
+  margin-top: 4px;
+}
+
+/* Processing state */
+.feed-upload--processing {
+  border-style: solid;
+  border-color: #0A5546;
+  background: #FAFDFB;
+  cursor: default;
+  gap: 0;
+}
+
+.feed-upload__processing-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.feed-upload__spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #C2DDD8;
+  border-top-color: #0A5546;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 8px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.feed-upload__processing-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #343538;
+  margin: 0;
+}
+
+.feed-upload__processing-file {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0A5546;
+  background: #E3F3EF;
+  padding: 2px 10px;
+  border-radius: 20px;
+  margin: 0;
+}
+
+.feed-upload__processing-sub {
+  font-size: 13px;
+  color: #56595E;
+  margin: 0;
+}

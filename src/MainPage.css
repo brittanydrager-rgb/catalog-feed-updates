@@ -1,0 +1,338 @@
+.main-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.main-page__content {
+  padding: 24px 80px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Page header ──────────────────────────────────────────────────── */
+.inv-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 80px;
+  border-bottom: 1px solid #E8E9EB;
+  flex-shrink: 0;
+}
+
+.inv-page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #030213;
+  margin: 0 0 4px;
+}
+
+.inv-page-desc {
+  font-size: 13px;
+  color: #717182;
+  margin: 0;
+  line-height: 1.5;
+  max-width: 520px;
+}
+
+.inv-page-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.inv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.inv-btn--primary {
+  background: #0A5546;
+  color: #ffffff;
+}
+.inv-btn--primary:hover { background: #084336; }
+
+.inv-btn--outline {
+  background: #ffffff;
+  color: #343538;
+  border: 1px solid #C8CACD;
+}
+.inv-btn--outline:hover { background: #F5F5F7; }
+
+.inv-btn--sm {
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+/* ── Filter bar ───────────────────────────────────────────────────── */
+.inv-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inv-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid #C8CACD;
+  border-radius: 6px;
+  background: #ffffff;
+  flex: 1;
+  min-width: 280px;
+  max-width: 400px;
+}
+
+.inv-search__input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #343538;
+  font-family: inherit;
+  background: transparent;
+}
+.inv-search__input::placeholder { color: #C8CACD; }
+
+.inv-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border: 1px solid #C8CACD;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 14px;
+  color: #343538;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+.inv-filter-btn:hover { background: #F5F5F7; }
+
+/* ── Info banner ──────────────────────────────────────────────────── */
+.inv-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #F5FBF9;
+  border: 1px solid #C4E6DC;
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 120px;
+}
+
+.inv-banner__body {
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.inv-banner__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #030213;
+  margin: 0;
+  line-height: 1.4;
+  max-width: 520px;
+}
+
+.inv-banner__sub {
+  font-size: 13px;
+  color: #56595E;
+  margin: 0;
+  line-height: 1.5;
+  max-width: 520px;
+}
+
+.inv-banner__graphic {
+  flex-shrink: 0;
+  width: 160px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inv-banner__img-placeholder {
+  width: 120px;
+  height: 80px;
+  background: #C4E6DC;
+  border-radius: 6px;
+  opacity: 0.5;
+}
+
+/* ── File table ───────────────────────────────────────────────────── */
+.inv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.inv-table thead th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #717182;
+  border-bottom: 1px solid #E8E9EB;
+  background: #ffffff;
+  white-space: nowrap;
+}
+
+.inv-table thead th:first-child { padding-left: 0; }
+
+.inv-table tbody tr {
+  border-bottom: 1px solid #E8E9EB;
+  transition: background 0.1s;
+}
+.inv-table tbody tr:last-child { border-bottom: none; }
+.inv-table tbody tr:hover { background: #FAFAFA; }
+
+.inv-table tbody td {
+  padding: 12px;
+  color: #343538;
+  vertical-align: middle;
+}
+
+.inv-table tbody td:first-child { padding-left: 0; }
+
+/* New row highlight */
+.inv-table__row--new {
+  background: #F5FBF9;
+}
+.inv-table__row--new:hover { background: #ECF6F3 !important; }
+
+/* Chevron cell */
+.inv-table__chevron-cell {
+  width: 24px;
+  padding: 0 !important;
+  text-align: center;
+}
+
+/* Date cell */
+.inv-table__date-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.inv-table__date {
+  font-size: 14px;
+  color: #030213;
+  white-space: nowrap;
+}
+
+.inv-table__time {
+  font-size: 12px;
+  color: #717182;
+  white-space: nowrap;
+}
+
+/* Teal links */
+.inv-table__link {
+  color: #0d7a6a;
+  cursor: pointer;
+}
+.inv-table__link:hover { text-decoration: underline; color: #0a5546; }
+
+/* Filename truncation */
+.inv-table__filename {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Status badges ────────────────────────────────────────────────── */
+.inv-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.inv-status--completed {
+  background: #EAF6EE;
+  color: #277843;
+}
+
+.inv-status--warnings {
+  background: #FEF9EC;
+  color: #A06400;
+}
+
+.inv-status--rejected {
+  background: #FEF0EE;
+  color: #C5280C;
+}
+
+/* ── Status tooltip ───────────────────────────────────────────────── */
+.inv-status-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.inv-status__icon {
+  margin-left: 4px;
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+
+.inv-status__tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1b1e;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 400;
+  padding: 7px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 200;
+  width: 220px;
+  text-align: center;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.inv-status__tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1a1b1e;
+}
+
+.inv-status-wrap:hover .inv-status__tooltip {
+  opacity: 1;
+}

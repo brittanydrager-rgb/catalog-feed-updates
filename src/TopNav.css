@@ -1,0 +1,107 @@
+.top-nav {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+}
+
+.top-nav__logo {
+  height: 18px;
+  width: 179px;
+  margin: 1px 24px 0px 16px;
+  flex-shrink: 0;
+}
+
+.top-nav__tabs {
+  display: flex;
+  align-items: stretch;
+  height: 48px;
+  flex: 1;
+}
+
+.top-nav__tab {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 8px 16px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  font-family: inherit;
+  user-select: none;
+  transition: background 0.15s;
+}
+.top-nav__tab:hover { background-color: var(--hover-bg); }
+
+.top-nav__tab-inner {
+  display: flex;
+  width: 100%;
+  height: 40px;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+}
+.top-nav__tab-inner--underlined { border-bottom: 2px solid white; }
+
+.top-nav__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 16px;
+}
+
+.top-nav__icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.top-nav__icon-btn:hover { background-color: var(--hover-bg); }
+
+.top-nav__user-menu {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  height: 48px;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+.top-nav__user-menu:hover { background-color: var(--hover-bg); }
+
+.top-nav__retailer-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: #00B140;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-nav__user-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+}
